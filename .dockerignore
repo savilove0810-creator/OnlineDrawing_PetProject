@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/.git/
+**/.claude/
+**/.agents/

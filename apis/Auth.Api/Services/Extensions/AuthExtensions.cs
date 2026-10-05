@@ -1,0 +1,21 @@
+using Auth.Api.Data;
+using Auth.Api.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
+
+namespace Auth.Api.Services.Extensions
+{
+    public static class AuthExtensions
+    {
+        public static IServiceCollection AddAuthServices(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+
+            services.AddScoped<IAccountRepository, AccountRepository>();
+            services.AddScoped<IJwtService, JwtService>();
+            services.AddScoped<IAccountService, AccountService>();
+
+            return services;
+        }
+    }
+}

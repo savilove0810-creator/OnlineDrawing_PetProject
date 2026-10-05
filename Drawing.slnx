@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="apis/BuildingBlocks/Drawing.Shared.Web/Drawing.Shared.Web.csproj" />
+  </Folder>
+  <Folder Name="/apis/">
+    <Project Path="apis/Auth.Api/Auth.Api.csproj" />
+    <Project Path="apis/Gateway.Api/Gateway.Api.csproj" />
+    <Project Path="apis/RealtimeBoard.Api/RealtimeBoard.Api.csproj" />
+    <Project Path="apis/Rooms.Api/Rooms.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Drawing.Tests/Drawing.Tests.csproj" />
+  </Folder>
+</Solution>

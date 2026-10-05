@@ -1,0 +1,148 @@
+services:
+  postgres-auth:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d authdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-rooms:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: roomsdb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_rooms_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d roomsdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-api:
+    build:
+      context: .
+      dockerfile: apis/Auth.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres-auth;Port=5432;Database=authdb;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY}
+    ports:
+      - "5123:8080"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+
+  rooms-api:
+    build:
+      context: .
+      dockerfile: apis/Rooms.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres-rooms;Port=5432;Database=roomsdb;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      RabbitMq__ConnectionString: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      Jwt__Key: ${JWT_KEY}
+    ports:
+      - "5204:8080"
+    depends_on:
+      postgres-rooms:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  realtime-board-api:
+    build:
+      context: .
+      dockerfile: apis/RealtimeBoard.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD}
+      RabbitMq__ConnectionString: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RoomsApi__BaseUrl: http://rooms-api:8080
+      Jwt__Key: ${JWT_KEY}
+    ports:
+      - "5238:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rooms-api:
+        condition: service_started
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: apis/Gateway.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ReverseProxy__Clusters__auth__Destinations__destination1__Address: http://auth-api:8080
+      ReverseProxy__Clusters__rooms__Destinations__destination1__Address: http://rooms-api:8080
+      ReverseProxy__Clusters__board__Destinations__destination1__Address: http://realtime-board-api:8080
+    ports:
+      - "5215:8080"
+    depends_on:
+      auth-api:
+        condition: service_started
+      rooms-api:
+        condition: service_started
+      realtime-board-api:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: DrawingFront/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5215
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      gateway-api:
+        condition: service_started
+
+volumes:
+  postgres_auth_data:
+  postgres_rooms_data:
